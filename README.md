@@ -73,7 +73,8 @@ Ready to run AgentForge locally? Follow these steps.
     # Create an environment file from the example
     cp .env.example .env
     ```
-    Now, open `backend/.env` with a text editor and add your `OPENAI_API_KEY`.
+    Open `backend/.env` and add your `OPENAI_API_KEY`. Optionally change
+    `OPENAI_MODEL` if you want a different model.
 
 3.  **Set up the Frontend:**
     ```bash
@@ -82,7 +83,11 @@ Ready to run AgentForge locally? Follow these steps.
 
     # Install dependencies
     npm install
+
+    # Set environment variables
+    cp .env.local.example .env.local
     ```
+    Edit `frontend/.env.local` if your backend runs on a different URL.
 
 ### Running the Application
 

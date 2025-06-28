@@ -6,6 +6,8 @@ This is a simple Next.js + Tailwind CSS project used as the UI for AgentForge.
 
 ```bash
 npm install
+# copy environment file and update if necessary
+cp .env.local.example .env.local
 ```
 
 ## Development Server
