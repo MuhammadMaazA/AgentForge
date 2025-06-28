@@ -40,6 +40,9 @@ AgentForge is a full-stack monorepo built with modern, scalable technologies.
 | **Styling**   | [**Tailwind CSS**](https://tailwindcss.com/)                                                                 |
 | **AI Core**   | [**OpenAI API**](https://platform.openai.com/) (GPT-4o)                                                    |
 
+This repository currently provides a minimal FastAPI backend and a basic Next.js
+frontend to kickstart development.
+
 ## 🚀 Getting Started
 
 Ready to run AgentForge locally? Follow these steps.
