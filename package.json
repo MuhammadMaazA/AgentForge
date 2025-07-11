@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "allotment": "^1.20.4",
+    "lucide-react": "^0.525.0",
+    "react-resizable-panels": "^3.0.3",
+    "xterm-react": "^1.0.0"
+  }
+}
