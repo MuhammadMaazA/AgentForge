@@ -86,13 +86,13 @@ def create_meta_prompt(request: AppGenerationRequest) -> str:
     
     # Enhanced instructions for various app types
     app_type_details = {
-        "react": "A modern React application using functional components, hooks, and a clear component hierarchy. Include a basic build setup (e.g., using Vite or Create React App structure).",
-        "vue": "A Vue.js application using Single File Components (SFCs), a proper component structure, and Vue Router for navigation if multiple views are needed.",
-        "streamlit": "A multi-page Streamlit application with a clear structure. Use a `pages/` directory for different pages and a main script to tie everything together. Ensure all necessary libraries are imported. The main script should have content and functionality visible when run.",
-        "flask": "A well-structured Flask application with blueprints for modularity, a `templates/` directory for HTML files, and a `static/` directory for assets. Include a `requirements.txt` file. ALWAYS include a root route (`@app.route('/')`) that renders a page or returns content.",
-        "fastapi": "A robust FastAPI application using APIRouter for modular endpoints, Pydantic models for validation, and a clear separation of concerns. Include a `requirements.txt` file. ALWAYS include a root route (`@app.get('/')`) that returns a welcome message or serves an HTML page.",
+        "react": "A modern React application using functional components, hooks, and a clear component hierarchy. Include a basic build setup (e.g., using Vite or Create React App structure). Configure the dev server to use the PORT environment variable (process.env.PORT) for port configuration, with a fallback to 3000.",
+        "vue": "A Vue.js application using Single File Components (SFCs), a proper component structure, and Vue Router for navigation if multiple views are needed. Configure the dev server to use the PORT environment variable for port configuration.",
+        "streamlit": "A multi-page Streamlit application with a clear structure. Use a `pages/` directory for different pages and a main script to tie everything together. Ensure all necessary libraries are imported. The main script should have content and functionality visible when run. DO NOT hardcode ports - let Streamlit use command-line arguments for port configuration.",
+        "flask": "A well-structured Flask application with blueprints for modularity, a `templates/` directory for HTML files, and a `static/` directory for assets. Include a `requirements.txt` file. ALWAYS include a root route (`@app.route('/')`) that renders a page or returns content. Configure the app to use environment variables for host and port (os.environ.get('HOST', '127.0.0.1') and int(os.environ.get('PORT', 5000))).",
+        "fastapi": "A robust FastAPI application using APIRouter for modular endpoints, Pydantic models for validation, and a clear separation of concerns. Include a `requirements.txt` file. ALWAYS include a root route (`@app.get('/')`) that returns a welcome message or serves an HTML page. Configure uvicorn to use environment variables for host and port (host=os.environ.get('HOST', '127.0.0.1'), port=int(os.environ.get('PORT', 8000))).",
         "python-cli": "A Python command-line interface application using `argparse` or a library like `click` for argument parsing. Structure the code into logical modules.",
-        "nextjs": "A Next.js application with a proper `pages` or `app` directory structure, API routes if needed, and components organized logically. Include necessary configurations like `tailwind.config.js` if applicable."
+        "nextjs": "A Next.js application with a proper `pages` or `app` directory structure, API routes if needed, and components organized logically. Include necessary configurations like `tailwind.config.js` if applicable. Configure the dev server to use the PORT environment variable for port configuration."
     }
     
     app_guidance = app_type_details.get(request.app_type.lower(), "A well-structured application of the specified type.")
@@ -120,6 +120,11 @@ User Request:
 
 Project Guidance:
 - {app_guidance}
+- **CRITICAL: Port Configuration:** DO NOT hardcode ports in your generated code. For web applications:
+  - Flask: Use `host=os.environ.get('HOST', '127.0.0.1'), port=int(os.environ.get('PORT', 5000))` in app.run()
+  - FastAPI: Use `host=os.environ.get('HOST', '127.0.0.1'), port=int(os.environ.get('PORT', 8000))` in uvicorn.run()
+  - Streamlit: Do not include port configuration in the code - let the runner handle it via command-line arguments
+  - React/Vue/Next.js: Configure package.json scripts to use the PORT environment variable
 - **Crucially, you MUST include a package manager manifest file.** For Python projects (like Flask, FastAPI, Streamlit), this MUST be a `requirements.txt` file. For Node.js projects (like React, Next.js, Vue), this MUST be a `package.json` file.
 - **You MUST also include a `README.md` file.** This file should provide clear, simple instructions on how to set up the project (e.g., `pip install -r requirements.txt` or `npm install`) and how to run it (e.g., `streamlit run app.py` or `npm run dev`).
 - **Ensure the application has a functional root/home page.** For web frameworks (Flask, FastAPI), always include a root route that displays content. For frontend frameworks (React, Vue), ensure there's a proper index/home component.
@@ -525,6 +530,11 @@ CODE GENERATION GUIDELINES:
 3.  Include all necessary configuration files (e.g., `package.json`, `tsconfig.json`, `requirements.txt`).
 4.  Follow best practices for the specified application type.
 5.  Do not include any explanations or markdown formatting in your response. Your entire output must be a single, valid JSON object.
+6.  **CRITICAL: Port Configuration:** DO NOT hardcode ports in your generated code:
+    - Flask: Use `host=os.environ.get('HOST', '127.0.0.1'), port=int(os.environ.get('PORT', 5000))` in app.run()
+    - FastAPI: Use `host=os.environ.get('HOST', '127.0.0.1'), port=int(os.environ.get('PORT', 8000))` in uvicorn.run()
+    - Streamlit: Do not include port configuration in the code - let the runner handle it
+    - Node.js: Configure package.json scripts to use the PORT environment variable
 
 {app_type_instructions.get(request.app_type, "Generate a standard project structure.")}
 
@@ -656,6 +666,13 @@ Project Details:
 Complete Project File Structure (for context):
 {project_context}
 
+CRITICAL INSTRUCTIONS FOR PORT CONFIGURATION:
+- DO NOT hardcode ports in your generated code
+- For Flask applications: Use `host=os.environ.get('HOST', '127.0.0.1'), port=int(os.environ.get('PORT', 5000))` in app.run()
+- For FastAPI applications: Use `host=os.environ.get('HOST', '127.0.0.1'), port=int(os.environ.get('PORT', 8000))` in uvicorn.run()
+- For Streamlit applications: Do not include any port configuration in the code - let the runner handle it
+- For Node.js applications: Configure package.json scripts to use the PORT environment variable
+
 Now, generate the complete and correct code for the following file ONLY:
 File Path: `{file_path}`
 
@@ -671,7 +688,7 @@ async def stream_gemini_response_two_stage(request: AppGenerationRequest):
     """
     try:
         setup_ai_clients()
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         # --- STAGE 1: Plan the project structure ---
         yield f"data: {json.dumps({'type': 'log', 'message': 'Phase 1: Planning project structure...'})}\n\n"

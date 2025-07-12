@@ -12,6 +12,8 @@ import tempfile
 import shutil
 import queue
 import re
+import signal
+import psutil  # For better process management
 from fastapi.responses import StreamingResponse
 
 # Setup logging
@@ -47,44 +49,57 @@ def get_next_available_port():
 
 def cleanup_process(process_id):
     """Stop a running process and clean up its resources."""
-    if process_id in active_runs:
-        run_info = active_runs[process_id]
-        logger.info(f"Cleaning up process {process_id} on port {run_info.get('port')}")
-        
-        process = run_info.get('process')
-        if process and process.poll() is None:  # Check if process is still running
-            try:
-                logger.info(f"Terminating process {process_id}")
-                process.terminate()
+    try:
+        if process_id in active_runs:
+            run_info = active_runs[process_id]
+            logger.info(f"Quick cleanup of process {process_id}")
+            
+            process = run_info.get('process')
+            if process and process.poll() is None:
                 try:
-                    process.wait(timeout=3)  # Reduced timeout to 3 seconds
-                    logger.info(f"Process {process_id} terminated gracefully.")
-                except subprocess.TimeoutExpired:
-                    logger.warning(f"Process {process_id} did not terminate gracefully, force killing.")
-                    process.kill()
-                    try:
-                        process.wait(timeout=2)  # Give it 2 more seconds to die
-                        logger.info(f"Process {process_id} force killed.")
-                    except subprocess.TimeoutExpired:
-                        logger.error(f"Process {process_id} could not be killed - it may be stuck.")
-            except Exception as e:
-                logger.error(f"Error terminating process {process_id}: {e}")
+                    logger.info(f"Force killing process {process_id} (PID: {process.pid})")
+                    process.kill()  # Just kill it immediately
+                except Exception as e:
+                    logger.error(f"Error killing process {process_id}: {e}")
 
-        temp_dir = run_info.get('temp_dir')
-        if temp_dir and os.path.exists(temp_dir):
+            # Don't bother with temp directory cleanup - let OS handle it
+            # Remove from active runs immediately
+            del active_runs[process_id]
+            logger.info(f"Process {process_id} cleanup completed.")
+        else:
+            logger.warning(f"Process {process_id} not found in active_runs during cleanup.")
+    except Exception as e:
+        logger.error(f"Error during cleanup of process {process_id}: {e}")
+        # Make sure we remove it from active_runs even if cleanup fails
+        if process_id in active_runs:
             try:
-                shutil.rmtree(temp_dir)
-                logger.info(f"Removed temporary directory: {temp_dir}")
-            except Exception as e:
-                logger.error(f"Error removing temporary directory {temp_dir}: {e}")
-
-        del active_runs[process_id]
-        logger.info(f"Process {process_id} cleanup completed.")
-    else:
-        logger.warning(f"Process {process_id} not found in active_runs during cleanup.")
+                del active_runs[process_id]
+            except:
+                pass
 
 # Cleanup all running processes on exit
-atexit.register(lambda: [cleanup_process(pid) for pid in list(active_runs.keys())])
+def cleanup_all_processes():
+    """Cleanup all processes without blocking shutdown"""
+    logger.info("Starting cleanup of all processes...")
+    try:
+        # Just kill everything quickly
+        for process_id, run_info in list(active_runs.items()):
+            process = run_info.get('process')
+            if process and process.poll() is None:
+                try:
+                    process.kill()
+                except:
+                    pass
+        
+        # Clear the active runs dictionary
+        active_runs.clear()
+        logger.info("Cleanup completed")
+        
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+
+# Don't register atexit - it causes hanging
+# atexit.register(cleanup_all_processes)
 
 
 class RunRequest(BaseModel):
@@ -115,14 +130,30 @@ async def run_project(request: RunRequest):
     Receives a file system, writes it to a temporary directory,
     installs dependencies, and runs the project.
     """
+    logger.info("=== NEW RUN REQUEST ===")
+    logger.info(f"Current active runs: {list(active_runs.keys())}")
+    
     temp_dir = tempfile.mkdtemp(prefix="agentforge_run_")
     process_id = os.path.basename(temp_dir)
     port = get_next_available_port()
+
+    logger.info(f"Generated process_id: {process_id}, port: {port}")
 
     # Clean up any previous run with the same process_id, just in case
     if process_id in active_runs:
         logger.warning(f"Found existing process {process_id}. Cleaning up before new run.")
         cleanup_process(process_id)
+
+    # Kill any orphaned processes that might be blocking
+    try:
+        logger.info("Checking for orphaned processes...")
+        for existing_id, run_info in list(active_runs.items()):
+            process = run_info.get('process')
+            if process and process.poll() is not None:  # Process is dead but still tracked
+                logger.warning(f"Found dead process {existing_id}, cleaning up...")
+                cleanup_process(existing_id)
+    except Exception as e:
+        logger.error(f"Error during orphan cleanup: {e}")
 
     project_dir = temp_dir # The commands will run from the root of the temp dir
     try:
@@ -295,11 +326,19 @@ async def run_project(request: RunRequest):
             def stream_reader(pipe, pipe_name):
                 try:
                     for line in iter(pipe.readline, ''):
+                        if not line:  # EOF
+                            break
                         log_message = f"[{pipe_name}] {line.strip()}"
-                        log_queue.put(log_message)
-                        logger.info(f"[{process_id}]{log_message}")
+                        if process_id in active_runs:  # Only log if process still tracked
+                            log_queue.put(log_message)
+                            logger.info(f"[{process_id}]{log_message}")
+                except Exception as e:
+                    logger.error(f"Error reading from {pipe_name}: {e}")
                 finally:
-                    pipe.close()
+                    try:
+                        pipe.close()
+                    except:
+                        pass
 
             try:
                 if install_command:
@@ -321,6 +360,7 @@ async def run_project(request: RunRequest):
                 log_queue.put(f"[run] Starting: {run_command}")
                 log_queue.put(f"[run] Working directory: {execution_cwd}")
                 log_queue.put(f"[run] Port: {port}")
+                
                 proc = subprocess.Popen(
                     run_command, 
                     shell=True, 
@@ -333,35 +373,62 @@ async def run_project(request: RunRequest):
                 )
                 
                 # Update the active_runs entry with the actual process
-                active_runs[process_id]["process"] = proc
+                if process_id in active_runs:
+                    active_runs[process_id]["process"] = proc
 
                 stdout_thread = threading.Thread(target=stream_reader, args=(proc.stdout, 'stdout'), daemon=True)
                 stderr_thread = threading.Thread(target=stream_reader, args=(proc.stderr, 'stderr'), daemon=True)
                 stdout_thread.start()
                 stderr_thread.start()
                 
-                proc.wait() # Wait for process to finish
-                stdout_thread.join()
-                stderr_thread.join()
+                # Wait for process to finish
+                proc.wait()
+                
+                # Wait for log readers to finish, but with timeout
+                stdout_thread.join(timeout=2)
+                stderr_thread.join(timeout=2)
 
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 error_message = f"Error running project: {e}"
-                if hasattr(e, 'stderr'):
+                if hasattr(e, 'stderr') and e.stderr:
                     error_message += f"\nStderr: {e.stderr}"
-                log_queue.put(f"[error] {error_message}")
+                if process_id in active_runs:
+                    log_queue.put(f"[error] {error_message}")
+                logger.error(f"[{process_id}] {error_message}")
+            except Exception as e:
+                error_message = f"Unexpected error: {e}"
+                if process_id in active_runs:
+                    log_queue.put(f"[error] {error_message}")
                 logger.error(f"[{process_id}] {error_message}")
             finally:
-                log_queue.put("[system] Process finished. Cleaning up.")
+                if process_id in active_runs:
+                    log_queue.put("[system] Process finished. Cleaning up.")
                 logger.info(f"[{process_id}] Process finished or failed. Cleaning up.")
-                cleanup_process(process_id)
+                # Don't call cleanup_process here as it might cause recursion
+                # The process will be cleaned up when stop is called or server shuts down
 
 
         threading.Thread(target=run_in_background, daemon=True).start()
 
-        # Give the server a moment to start up
-        time.sleep(5) 
-
-        return {"url": f"http://127.0.0.1:8001/api/proxy/{process_id}", "process_id": process_id}
+        # Give the server a moment to start up, but don't wait too long
+        logger.info(f"Waiting for process {process_id} to start...")
+        time.sleep(3)  # Reduced from 5 to 3 seconds
+        
+        # Check if process actually started
+        if process_id in active_runs:
+            process = active_runs[process_id].get('process')
+            if process and process.poll() is None:
+                logger.info(f"Process {process_id} started successfully on port {port}")
+                return {"url": f"http://127.0.0.1:{port}", "process_id": process_id}
+            else:
+                logger.error(f"Process {process_id} failed to start or died immediately")
+                # Clean up failed process
+                if process_id in active_runs:
+                    cleanup_process(process_id)
+                raise HTTPException(status_code=500, detail="Failed to start project - process died immediately")
+        else:
+            logger.error(f"Process {process_id} not found after startup attempt")
+            raise HTTPException(status_code=500, detail="Failed to start project - process not found")
 
     except Exception as e:
         logger.error(f"Error setting up project run: {e}")
@@ -384,13 +451,95 @@ async def stop_project(request: Request):
         logger.warning(f"Process {process_id} not found in active_runs")
         return {"success": False, "message": f"Process {process_id} not found or already stopped."}
     
-    # Run cleanup in a separate thread to avoid blocking the API response
-    def cleanup_async():
-        cleanup_process(process_id)
+    try:
+        # Quick and dirty cleanup - just kill and remove
+        run_info = active_runs[process_id]
+        process = run_info.get('process')
+        
+        if process and process.poll() is None:
+            logger.info(f"Force killing process {process_id} (PID: {process.pid})")
+            try:
+                process.kill()
+                process.wait(timeout=1)  # Quick wait
+            except:
+                pass  # Don't care if it fails
+        
+        # Remove from active runs immediately
+        del active_runs[process_id]
+        logger.info(f"Process {process_id} stopped and removed from tracking")
+        
+        return {"success": True, "message": f"Process {process_id} stopped successfully."}
+    except Exception as e:
+        logger.error(f"Error stopping process {process_id}: {e}")
+        # Still try to remove it
+        if process_id in active_runs:
+            try:
+                del active_runs[process_id]
+            except:
+                pass
+        return {"success": True, "message": f"Process {process_id} removed from tracking (may have been stuck)."}  # Return success anyway
+
+@app.post("/api/force-stop")
+async def force_stop_project(request: Request):
+    """Force stop a project by killing all processes on its port"""
+    body = await request.json()
+    process_id = body.get("process_id")
+    if not process_id:
+        raise HTTPException(status_code=400, detail="process_id is required.")
     
-    threading.Thread(target=cleanup_async, daemon=True).start()
+    logger.info(f"Received request to force stop process {process_id}")
     
-    return {"success": True, "message": f"Process {process_id} stop initiated."}
+    # Check if process exists
+    if process_id not in active_runs:
+        logger.warning(f"Process {process_id} not found in active_runs")
+        return {"success": False, "message": f"Process {process_id} not found or already stopped."}
+    
+    port = active_runs[process_id].get("port")
+    if port:
+        try:
+            # Find all processes using this port and kill them
+            for proc in psutil.process_iter(['pid', 'name', 'connections']):
+                try:
+                    for conn in proc.info['connections']:
+                        if conn.laddr.port == port:
+                            logger.info(f"Force killing process {proc.info['pid']} ({proc.info['name']}) using port {port}")
+                            psutil.Process(proc.info['pid']).kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+        except Exception as e:
+            logger.error(f"Error force stopping processes on port {port}: {e}")
+    
+    # Clean up the process record
+    cleanup_process(process_id)
+    
+    return {"success": True, "message": f"Process {process_id} force stopped."}
+
+@app.post("/api/kill-port")
+async def kill_processes_on_port(request: Request):
+    """Kill all processes using a specific port"""
+    body = await request.json()
+    port = body.get("port")
+    if not port:
+        raise HTTPException(status_code=400, detail="port is required.")
+    
+    logger.info(f"Received request to kill all processes on port {port}")
+    
+    killed_processes = []
+    try:
+        for proc in psutil.process_iter(['pid', 'name', 'connections']):
+            try:
+                for conn in proc.info['connections']:
+                    if conn.laddr.port == port:
+                        logger.info(f"Killing process {proc.info['pid']} ({proc.info['name']}) using port {port}")
+                        psutil.Process(proc.info['pid']).kill()
+                        killed_processes.append(f"PID {proc.info['pid']} ({proc.info['name']})")
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+    except Exception as e:
+        logger.error(f"Error killing processes on port {port}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error killing processes: {str(e)}")
+    
+    return {"success": True, "killed_processes": killed_processes, "message": f"Killed {len(killed_processes)} processes on port {port}"}
 
 async def log_generator(process_id: str):
     """Yields logs from the queue for a given process_id."""
@@ -442,70 +591,72 @@ async def debug_active_runs():
         } for pid, data in active_runs.items()}
     }
 
-@app.get("/api/proxy/{process_id}")
-async def proxy_to_app(process_id: str, request: Request):
-    """Proxy requests to the running app to avoid iframe restrictions"""
-    if process_id not in active_runs:
-        raise HTTPException(status_code=404, detail="Process not found")
-    
-    app_port = active_runs[process_id]["port"]
-    
-    # Get the path from the request
-    path = request.url.path.replace(f"/api/proxy/{process_id}", "")
-    query_string = str(request.url.query) if request.url.query else ""
-    
-    # Build the target URL
-    target_url = f"http://127.0.0.1:{app_port}{path}"
-    if query_string:
-        target_url += f"?{query_string}"
-    
-    try:
-        import requests
-        response = requests.get(target_url, timeout=10)
-        
-        # Remove headers that prevent iframe embedding
-        headers_to_remove = [
-            "x-frame-options",
-            "content-security-policy",
-            "x-content-type-options"
-        ]
-        
-        response_headers = {}
-        for key, value in response.headers.items():
-            if key.lower() not in headers_to_remove:
-                response_headers[key] = value
-        
-        from fastapi import Response
-        return Response(
-            content=response.content,
-            media_type=response.headers.get("content-type", "text/html"),
-            headers=response_headers,
-            status_code=response.status_code
-        )
-    except Exception as e:
-        logger.error(f"Error proxying to app: {e}")
-        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+@app.get("/api/health")
+async def health_check():
+    """Simple health check endpoint"""
+    return {"status": "ok", "active_processes": list(active_runs.keys())}
 
-@app.get("/api/debug/check-headers/{process_id}")
-async def check_app_headers(process_id: str):
-    """Debug endpoint to check what headers the app is sending"""
-    if process_id not in active_runs:
-        raise HTTPException(status_code=404, detail="Process not found")
-    
-    app_port = active_runs[process_id]["port"]
-    
+@app.post("/api/cleanup-all")
+async def cleanup_all():
+    """Emergency cleanup endpoint to stop all processes"""
+    logger.info("Emergency cleanup requested")
     try:
-        import requests
-        response = requests.get(f"http://127.0.0.1:{app_port}", timeout=5)
-        return {
-            "status_code": response.status_code,
-            "headers": dict(response.headers),
-            "url": f"http://127.0.0.1:{app_port}"
-        }
+        # Make a copy of the keys to avoid dict changing during iteration
+        process_ids = list(active_runs.keys())
+        for process_id in process_ids:
+            try:
+                cleanup_process(process_id)
+            except Exception as e:
+                logger.error(f"Error cleaning up process {process_id}: {e}")
+        
+        return {"success": True, "message": f"Cleaned up {len(process_ids)} processes"}
     except Exception as e:
-        return {"error": str(e)}
+        logger.error(f"Error during cleanup all: {e}")
+        return {"success": False, "message": f"Error: {str(e)}"}
+
+@app.post("/api/reset-server")
+async def reset_server():
+    """Nuclear option - reset everything"""
+    logger.info("=== SERVER RESET REQUESTED ===")
+    try:
+        # Kill all tracked processes
+        for process_id, run_info in list(active_runs.items()):
+            try:
+                process = run_info.get('process')
+                if process:
+                    try:
+                        process.kill()
+                    except:
+                        pass
+            except:
+                pass
+        
+        # Clear everything
+        active_runs.clear()
+        
+        # Reset port counter
+        global next_port
+        next_port = 8002
+        
+        logger.info("Server reset completed")
+        return {"success": True, "message": "Server reset successfully"}
+    except Exception as e:
+        logger.error(f"Error during server reset: {e}")
+        return {"success": False, "message": f"Reset error: {str(e)}"}
 
 if __name__ == "__main__":
     import uvicorn
+    import signal
+    import sys
+    
+    def signal_handler(signum, frame):
+        """Handle Ctrl+C gracefully"""
+        logger.info(f"Received signal {signum}, shutting down immediately...")
+        # Just exit immediately, don't try to clean up
+        sys.exit(0)
+    
+    # Register signal handler for Ctrl+C
+    signal.signal(signal.SIGINT, signal_handler)
+    
     # This preview server should run on a different port than the main backend
     uvicorn.run(app, host="0.0.0.0", port=8001)

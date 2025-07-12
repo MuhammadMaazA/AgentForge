@@ -17,19 +17,18 @@ export default async function handler(
   }
 
   try {
-    const backendResponse = await fetch('http://127.0.0.1:8000/generate_project_stream', {
-      method: 'POST',
+    // Build the URL with query parameters for the backend
+    const backendUrl = new URL('http://127.0.0.1:8000/api/generate');
+    backendUrl.searchParams.append('app_name', app_name as string);
+    backendUrl.searchParams.append('app_type', app_type as string);
+    if (description) backendUrl.searchParams.append('description', description as string);
+    if (features) backendUrl.searchParams.append('features', features as string);
+
+    const backendResponse = await fetch(backendUrl.toString(), {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'Accept': 'text/event-stream'
-      },
-      body: JSON.stringify({
-        app_name: app_name as string,
-        // Split the features string back into an array
-        features: typeof features === 'string' ? features.split(',') : [],
-        app_type: app_type as string,
-        description: description as string,
-      }),
+      }
     });
 
     if (!backendResponse.ok) {
