@@ -16,15 +16,19 @@ export function Terminal({ logs }: TerminalProps) {
   }, [logs]);
 
   return (
-    <div className="h-full bg-gray-950 text-white font-mono text-sm p-4 overflow-y-auto">
-      <div className="text-gray-400 mb-2">Terminal Logs</div>
-      {logs.map((log, index) => (
-        <div key={index} className="whitespace-pre-wrap">
-          <span className="text-green-400 mr-2">$</span>
-          {log}
-        </div>
-      ))}
-      <div ref={logsEndRef} />
+    <div className="h-full bg-[#1e1e1e] text-[#cccccc] font-mono text-sm flex flex-col">
+      <div className="bg-[#2d2d30] p-3 text-[#cccccc] font-medium border-b border-[#3e3e42]">
+        Terminal
+      </div>
+      <div className="flex-1 p-4 overflow-y-auto">
+        {logs.map((log, index) => (
+          <div key={index} className="whitespace-pre-wrap">
+            <span className="text-[#4ec9b0] mr-2">$</span>
+            <span className="text-[#cccccc]">{log}</span>
+          </div>
+        ))}
+        <div ref={logsEndRef} />
+      </div>
     </div>
   );
 }

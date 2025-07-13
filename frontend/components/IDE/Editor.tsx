@@ -2,7 +2,7 @@ import dynamic from 'next/dynamic';
 
 const MonacoEditor = dynamic(() => import('./MonacoEditor').then(mod => mod.MonacoEditor), {
   ssr: false,
-  loading: () => <div className="h-full bg-gray-900 text-white p-4">Loading Editor...</div>
+  loading: () => <div className="h-full bg-[#1e1e1e] text-[#cccccc] p-4 flex items-center justify-center">Loading Editor...</div>
 });
 
 interface EditorProps {
@@ -13,7 +13,7 @@ interface EditorProps {
 
 export function EditorComponent({ value, language, onChange }: EditorProps) {
   return (
-    <div className="h-full bg-gray-900">
+    <div className="h-full bg-[#1e1e1e]">
       <MonacoEditor 
         value={value} 
         language={language}

@@ -5,14 +5,14 @@ interface PreviewProps {
 
 export function Preview({ url, onStop }: PreviewProps) {
   return (
-    <div className="h-full bg-white flex flex-col">
-      <div className="bg-gray-200 p-2 text-sm text-gray-700 font-semibold flex items-center justify-between">
+    <div className="h-full bg-[#1e1e1e] flex flex-col">
+      <div className="bg-[#2d2d30] p-3 text-sm text-[#cccccc] font-medium flex items-center justify-between border-b border-[#3e3e42]">
         <span>Live Preview</span>
         <div className="flex gap-2">
           {url && (
             <button
               onClick={() => window.open(url, '_blank')}
-              className="text-xs bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded"
+              className="text-xs bg-[#007acc] hover:bg-[#005a9e] text-white font-medium py-1.5 px-3 rounded transition-colors"
             >
               Open in New Tab
             </button>
@@ -20,7 +20,7 @@ export function Preview({ url, onStop }: PreviewProps) {
           {url && onStop && (
             <button
               onClick={onStop}
-              className="text-xs bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded"
+              className="text-xs bg-[#d73a49] hover:bg-[#b92534] text-white font-medium py-1.5 px-3 rounded transition-colors"
             >
               Stop
             </button>
@@ -34,7 +34,7 @@ export function Preview({ url, onStop }: PreviewProps) {
           title="Live Preview"
         />
       ) : (
-        <div className="flex-grow flex items-center justify-center bg-gray-50 text-gray-500">
+        <div className="flex-grow flex items-center justify-center bg-[#1e1e1e] text-[#969696]">
           Click "Run Project" to see a live preview.
         </div>
       )}

@@ -18,28 +18,30 @@ const getFileIcon = (filename: string) => {
     const extension = filename.split('.').pop()?.toLowerCase();
     switch (extension) {
         case 'json':
-            return <FileJson className="w-4 h-4 mr-2 text-yellow-500 flex-shrink-0" />;
+            return <FileJson className="w-4 h-4 mr-2 text-[#ffd700] flex-shrink-0" />;
         case 'js':
         case 'jsx':
-            return <FileCode className="w-4 h-4 mr-2 text-yellow-500 flex-shrink-0" />;
+            return <FileCode className="w-4 h-4 mr-2 text-[#f7df1e] flex-shrink-0" />;
         case 'ts':
         case 'tsx':
-            return <FileCode className="w-4 h-4 mr-2 text-blue-500 flex-shrink-0" />;
+            return <FileCode className="w-4 h-4 mr-2 text-[#3178c6] flex-shrink-0" />;
         case 'css':
         case 'scss':
-            return <FileCode className="w-4 h-4 mr-2 text-pink-500 flex-shrink-0" />;
+            return <FileCode className="w-4 h-4 mr-2 text-[#1572b6] flex-shrink-0" />;
         case 'html':
-            return <FileCode className="w-4 h-4 mr-2 text-orange-500 flex-shrink-0" />;
+            return <FileCode className="w-4 h-4 mr-2 text-[#e34f26] flex-shrink-0" />;
+        case 'py':
+            return <FileCode className="w-4 h-4 mr-2 text-[#3776ab] flex-shrink-0" />;
         case 'md':
-            return <FileText className="w-4 h-4 mr-2 text-gray-400 flex-shrink-0" />;
+            return <FileText className="w-4 h-4 mr-2 text-[#083fa1] flex-shrink-0" />;
         case 'png':
         case 'jpg':
         case 'jpeg':
         case 'gif':
         case 'svg':
-            return <FileImage className="w-4 h-4 mr-2 text-green-400 flex-shrink-0" />;
+            return <FileImage className="w-4 h-4 mr-2 text-[#a855f7] flex-shrink-0" />;
         default:
-            return <File className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" />;
+            return <File className="w-4 h-4 mr-2 text-[#cccccc] flex-shrink-0" />;
     }
 };
 
@@ -66,13 +68,13 @@ const FileTree = ({ items, onFileSelect, level = 0, basePath = '' }: FileTreePro
           return (
             <div key={currentPath}>
               <div
-                className="flex items-center cursor-pointer hover:bg-gray-700 rounded-md p-1"
-                style={{ paddingLeft: `${level * 1.5}rem` }}
+                className="flex items-center cursor-pointer hover:bg-[#2a2d2e] rounded p-1"
+                style={{ paddingLeft: `${level * 1.2}rem` }}
                 onClick={() => toggleExpand(name)}
               >
-                <ChevronRight className={`w-4 h-4 mr-1 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                <Folder className="w-4 h-4 mr-2 text-blue-400" />
-                <span>{name}</span>
+                <ChevronRight className={`w-3 h-3 mr-1 transition-transform text-[#cccccc] ${isExpanded ? 'rotate-90' : ''}`} />
+                <Folder className="w-4 h-4 mr-2 text-[#dcb67a]" />
+                <span className="text-[#cccccc] text-sm">{name}</span>
               </div>
               {isExpanded && item.children && (
                 <FileTree items={item.children} onFileSelect={onFileSelect} level={level + 1} basePath={currentPath} />
@@ -84,13 +86,13 @@ const FileTree = ({ items, onFileSelect, level = 0, basePath = '' }: FileTreePro
         return (
           <div
             key={currentPath}
-            className={`flex items-center cursor-pointer hover:bg-gray-700 rounded-md p-1 ${selectedFile === currentPath ? 'bg-gray-600' : ''}`}
-            style={{ paddingLeft: `${level * 1.5}rem` }}
+            className={`flex items-center cursor-pointer hover:bg-[#2a2d2e] rounded p-1 ${selectedFile === currentPath ? 'bg-[#37373d]' : ''}`}
+            style={{ paddingLeft: `${level * 1.2}rem` }}
             onClick={() => handleFileClick(currentPath)}
           >
-            <div style={{ width: '1rem' }}></div> {/* Spacer for alignment with folder icons */}
+            <div style={{ width: '0.8rem' }}></div> {/* Spacer for alignment with folder icons */}
             {getFileIcon(name)}
-            <span>{name}</span>
+            <span className="ml-2 text-[#cccccc] text-sm">{name}</span>
           </div>
         );
       })}
@@ -100,9 +102,13 @@ const FileTree = ({ items, onFileSelect, level = 0, basePath = '' }: FileTreePro
 
 export function FileExplorer({ fileSystem, onFileSelect }: FileExplorerProps) {
   return (
-    <div className="p-2 text-sm text-gray-300">
-      <div className="font-bold mb-2 uppercase text-gray-400 text-xs px-1">Explorer</div>
-      <FileTree items={fileSystem} onFileSelect={onFileSelect} />
+    <div className="w-full h-full bg-[#252526] text-[#cccccc]">
+      <div className="p-3 border-b border-[#2d2d30] bg-[#2d2d30]">
+        <div className="font-medium mb-0 uppercase text-[#cccccc] text-xs tracking-wide">Explorer</div>
+      </div>
+      <div className="p-2">
+        <FileTree items={fileSystem} onFileSelect={onFileSelect} />
+      </div>
     </div>
   );
 }

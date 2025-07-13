@@ -271,49 +271,81 @@ export function IDE({ prompt }: IDEProps) {
   const activeFileLanguage = activeFile ? getLanguageFromPath(activeFile) : 'plaintext';
 
   return (
-    <div className="h-screen w-screen bg-gray-800 text-white flex flex-col">
-        <div className="flex-shrink-0 p-2 border-b border-gray-700 flex items-center">
-            <h1 className="text-lg font-bold">AgentForge</h1>
+    <div className="h-screen w-screen bg-[#1e1e1e] text-white flex flex-col">
+        {/* Header Bar */}
+        <div className="flex-shrink-0 h-12 bg-[#2d2d30] border-b border-[#3e3e42] flex items-center px-4">
+            <div className="flex items-center space-x-3">
+                <div className="w-6 h-6 bg-[#007acc] rounded flex items-center justify-center">
+                    <span className="text-white text-xs font-bold">A</span>
+                </div>
+                <h1 className="text-lg font-medium text-[#cccccc]">AgentForge</h1>
+                <div className="text-sm text-[#858585]">•</div>
+                <div className="text-sm text-[#858585]">Generated Project</div>
+            </div>
             <div className="flex-grow"></div>
-            <button
-                onClick={handleStopProject}
-                disabled={!activeProcessId}
-                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-500 text-white font-bold py-2 px-4 rounded mr-2"
-            >
-                Stop
-            </button>
-            <button
-                onClick={handleRunProject}
-                disabled={isRunning}
-                className="bg-green-600 hover:bg-green-700 disabled:bg-gray-500 text-white font-bold py-2 px-4 rounded"
-            >
-                {isRunning ? 'Starting...' : (activeProcessId ? 'Restart Project' : 'Run Project')}
-            </button>
+            <div className="flex items-center space-x-2">
+                <button
+                    onClick={handleStopProject}
+                    disabled={!activeProcessId}
+                    className="bg-[#f14c4c] hover:bg-[#d73a3a] disabled:bg-[#404040] disabled:text-[#858585] text-white font-medium py-1.5 px-3 rounded text-sm transition-colors"
+                >
+                    Stop
+                </button>
+                <button
+                    onClick={handleRunProject}
+                    disabled={isRunning}
+                    className="bg-[#007acc] hover:bg-[#005a9e] disabled:bg-[#404040] disabled:text-[#858585] text-white font-medium py-1.5 px-3 rounded text-sm transition-colors"
+                >
+                    {isRunning ? 'Starting...' : (activeProcessId ? 'Restart' : 'Run Project')}
+                </button>
+            </div>
         </div>
+        
+        {/* Main Content Area */}
         <div className="flex-grow">
             <Allotment>
+                {/* File Explorer */}
                 <Allotment.Pane minSize={200} preferredSize="20%">
-                    <FileExplorer fileSystem={fileSystem} onFileSelect={setActiveFile} />
+                    <div className="h-full bg-[#252526] border-r border-[#3e3e42]">
+                        <FileExplorer fileSystem={fileSystem} onFileSelect={setActiveFile} />
+                    </div>
                 </Allotment.Pane>
+                
+                {/* Editor and Preview */}
                 <Allotment.Pane>
                     <Allotment vertical>
+                        {/* Code Editor */}
                         <Allotment.Pane>
-                            <Editor 
-                                value={activeFileContent || ''} 
-                                language={activeFileLanguage}
-                                onChange={(value) => activeFile && handleEditorChange(activeFile, value || '')}
-                            />
+                            <div className="h-full bg-[#1e1e1e]">
+                                <Editor 
+                                    value={activeFileContent || ''} 
+                                    language={activeFileLanguage}
+                                    onChange={(value) => activeFile && handleEditorChange(activeFile, value || '')}
+                                />
+                            </div>
                         </Allotment.Pane>
+                        
+                        {/* Live Preview */}
                         <Allotment.Pane>
-                            <Preview url={previewUrl} onStop={handleStopProject} />
+                            <div className="h-full bg-[#1e1e1e] border-t border-[#3e3e42]">
+                                <Preview url={previewUrl} onStop={handleStopProject} />
+                            </div>
                         </Allotment.Pane>
                     </Allotment>
                 </Allotment.Pane>
+                
+                {/* Terminal/Logs */}
                 <Allotment.Pane minSize={200} preferredSize="30%">
-                     <div className="col-start-2 row-start-2 bg-gray-900 h-full">
+                     <div className="h-full bg-[#1e1e1e] border-l border-[#3e3e42]">
                         {error ? (
-                        <div className="text-red-500 p-4">
-                            <span className="font-bold">ERROR:</span> {error}
+                        <div className="text-[#f14c4c] p-4 bg-[#2d2d30]">
+                            <div className="flex items-center space-x-2 mb-2">
+                                <div className="w-4 h-4 bg-[#f14c4c] rounded-full flex items-center justify-center">
+                                    <span className="text-white text-xs">!</span>
+                                </div>
+                                <span className="font-medium">Error</span>
+                            </div>
+                            <div className="text-sm">{error}</div>
                         </div>
                         ) : (
                         <Terminal logs={logs} />
